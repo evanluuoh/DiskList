@@ -1,0 +1,101 @@
+#include "BinaryFile.h"
+#include <string>
+#include <iostream>
+using namespace std;
+
+
+struct CStringNode
+{
+	const char* value;
+	BinaryFile::Offset next;
+};
+
+class DiskList
+{
+public:
+	DiskList(const std::string& filename);
+	bool push_front(const char* data);
+	bool remove(const char* data);
+	void printAll();
+private:
+	BinaryFile bf;
+	BinaryFile::Offset head;
+};
+
+DiskList::DiskList(const std::string& filename)
+{
+	bf.createNew(filename);
+	head = 0;
+	bf.write(head, 0);
+}
+
+bool DiskList::push_front(const char* data)
+{
+	if (strlen(data) > 256)
+		return false;
+
+	CStringNode newNode;
+	newNode.value = data; //initialize newNode
+	newNode.next = head;  //set newNode's next to the current head
+	head = bf.fileLength();  //the new head offset should point to newNode's current offset
+	bf.write(newNode, bf.fileLength());  //write the newNode into the list at the last open offset
+	bf.write(head, 0);  //update the head variable to point to the new offset in the list
+	return true;
+}
+
+bool DiskList::remove(const char* data)
+{
+	bool removed = false;
+	if (head == 0)
+		return false;
+	CStringNode currNode;
+	bf.read(currNode, head); //sets currNode equal to the head node
+	if (currNode.value == data)  //if head's value is equal to data, remove
+	{
+		head = currNode.next;
+	}
+
+	CStringNode nextNode;
+	for (BinaryFile::Offset i = head; i != 0; i = currNode.next)
+	{
+		bf.read(currNode, i);
+		bf.read(nextNode, currNode.next);
+		if (currNode.next != 0 && nextNode.value == data)
+		{
+			currNode.next = nextNode.next;
+			bf.write(currNode, i);
+			removed = true;
+		}
+	}
+	return removed;
+}
+
+void DiskList::printAll()
+{
+	CStringNode currNode;
+	for (BinaryFile::Offset i = head; i != 0; i = currNode.next)
+	{
+		bf.read(currNode, i);
+		cout << currNode.value << endl;
+	}
+}
+
+
+int main()
+{
+	DiskList x("mylist.dat");
+	x.push_front("Fred");
+	x.push_front("Lucy");
+	x.push_front("Ethel");
+	x.push_front("Ethel");
+	x.push_front("Lucy");
+	x.push_front("Fred");
+	x.push_front("Ethel");
+	x.push_front("Ricky");
+	x.push_front("Lucy");
+	x.remove("Lucy");
+	x.push_front("Fred");
+	x.push_front("Ricky");
+	x.printAll();  // writes, one per line
+				   // Ricky  Fred  Ricky  Ethel  Fred  Ethel  Ethel  Fred
+}
