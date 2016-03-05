@@ -6,7 +6,7 @@ using namespace std;
 
 struct CStringNode
 {
-	const char* value;
+	char value[256];
 	BinaryFile::Offset next;
 };
 
@@ -35,7 +35,7 @@ bool DiskList::push_front(const char* data)
 		return false;
 
 	CStringNode newNode;
-	newNode.value = data; //initialize newNode
+	strcpy(newNode.value, data); //initialize newNode
 	newNode.next = head;  //set newNode's next to the current head
 	head = bf.fileLength();  //the new head offset should point to newNode's current offset
 	bf.write(newNode, bf.fileLength());  //write the newNode into the list at the last open offset
@@ -50,7 +50,7 @@ bool DiskList::remove(const char* data)
 		return false;
 	CStringNode currNode;
 	bf.read(currNode, head); //sets currNode equal to the head node
-	if (currNode.value == data)  //if head's value is equal to data, remove
+	if (strcmp(currNode.value, data) == 0)  //if head's value is equal to data, remove
 	{
 		head = currNode.next;
 	}
@@ -60,7 +60,7 @@ bool DiskList::remove(const char* data)
 	{
 		bf.read(currNode, i);
 		bf.read(nextNode, currNode.next);
-		if (currNode.next != 0 && nextNode.value == data)
+		if (currNode.next != 0 && strcmp(nextNode.value, data) == 0)
 		{
 			currNode.next = nextNode.next;
 			bf.write(currNode, i);
