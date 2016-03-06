@@ -1,0 +1,131 @@
+#include "BinaryFile.h"
+#include <string>
+#include <iostream>
+using namespace std;
+
+
+struct CStringNode
+{
+	char value[256];
+	BinaryFile::Offset next;
+};
+
+class DiskList
+{
+public:
+	DiskList(const std::string& filename);
+	bool push_front(const char* data);
+	bool remove(const char* data);
+	void printAll();
+private:
+	BinaryFile bf;
+	BinaryFile::Offset head;
+	BinaryFile::Offset spaceHead;
+};
+
+DiskList::DiskList(const std::string& filename)
+{
+	bf.createNew(filename);
+	head = 0;
+	spaceHead = 0;
+	bf.write(head, 0);
+	bf.write(spaceHead, 4);
+}
+
+bool DiskList::push_front(const char* data)
+{
+	if (strlen(data) > 256)
+		return false;
+
+	CStringNode newNode;
+	strcpy(newNode.value, data); //initialize newNode
+	newNode.next = head;  //set newNode's next to the current head
+
+
+	if (spaceHead == 0)
+	{
+		head = bf.fileLength();  //the new head offset should point to newNode's current offset
+		bf.write(newNode, bf.fileLength());  //write the newNode into the list at the last open offset
+		bf.write(head, 0);  //update the head variable to point to the new offset in the list
+		return true;
+	}
+	else
+	{
+		CStringNode filledNode;
+		bf.read(filledNode, spaceHead);  //sets filledNode equal to the existing node at spaceHead
+		bf.write(newNode, spaceHead);  //overwrite the newNode into the first available open space
+		head = spaceHead;  //set head equal to newNode's offset
+		spaceHead = filledNode.next;  //set spaceHead equal to the next "deleted" node
+		bf.write(head, 0);
+		bf.write(spaceHead, 4);
+		return true;
+	}
+}
+
+bool DiskList::remove(const char* data)
+{
+	bool removed = false;
+	if (head == 0)
+		return false;
+	CStringNode currNode;
+	bf.read(currNode, head); //sets currNode equal to the head node
+	if (strcmp(currNode.value, data) == 0)  //if head's value is equal to data, remove
+	{
+		spaceHead = head;  //node at head is now the head of the deleted nodes
+		head = currNode.next;  //head is now the node after currNode
+		bf.write(head, 0);
+		bf.write(spaceHead, 4);
+		removed = true;
+	}
+
+	CStringNode nextNode;
+	for (BinaryFile::Offset i = head; i != 0; i = currNode.next)
+	{
+		bf.read(currNode, i);
+		bf.read(nextNode, currNode.next);
+		if (currNode.next != 0 && strcmp(nextNode.value, data) == 0)
+		{
+			BinaryFile::Offset temp = spaceHead;
+			BinaryFile::Offset temp2 = currNode.next;
+			spaceHead = currNode.next;  //spaceHead is now the offset of nextNode
+			currNode.next = nextNode.next;  //set the node after currNode to be the node after nextNode
+			nextNode.next = temp;  //set nextNode's next offset to the next "deleted" node
+		    bf.write(nextNode, temp2);
+			bf.write(currNode, i);
+			bf.write(spaceHead, 4);
+			removed = true;
+		}
+	}
+	return removed;
+}
+
+void DiskList::printAll()
+{
+	CStringNode currNode;
+	for (BinaryFile::Offset i = head; i != 0; i = currNode.next)
+	{
+		bf.read(currNode, i);
+		cout << currNode.value << endl;
+	}
+	cout << bf.fileLength() << endl;
+}
+
+
+int main()
+{
+	DiskList x("mylist.dat");
+	x.push_front("Fred");
+	x.push_front("Lucy");
+	x.push_front("Ethel");
+	x.push_front("Ethel");
+	x.push_front("Lucy");
+	x.push_front("Fred");
+	x.push_front("Ethel");
+	x.push_front("Ricky");
+	x.push_front("Lucy");
+	x.remove("Lucy");
+	x.push_front("Fred");
+	x.push_front("Ricky");
+	x.printAll();  // writes, one per line
+				   // Ricky  Fred  Ricky  Ethel  Fred  Ethel  Ethel  Fred
+}
