@@ -1,0 +1,105 @@
+#include "DiskMultiMap.h"
+#include <functional>
+
+using namespace std;
+
+DiskMultiMap::DiskMultiMap()
+{}
+
+DiskMultiMap::~DiskMultiMap()
+{
+	bf.close();
+}
+
+bool DiskMultiMap::createNew(const std::string& filename, unsigned int numBuckets)
+{
+	bf.close();
+
+	bool success = bf.createNew(filename);
+	if (!success)
+		return false;
+
+	Header header;
+	header.numBuckets = numBuckets;
+	header.spaceHead = NULL_OFFSET;
+	success = bf.write(header, 0);  //store header first
+	if (!success)
+		return false;
+
+	int headerSize = sizeof(header);  //then store the buckets (8)
+	int bucketSize = sizeof(Bucket);  //keep track of the size of a Bucket (4)
+	for (int i = 0; i < numBuckets; i++)
+	{
+		Bucket b;
+		b.head = NULL_OFFSET;
+		success = bf.write(b, headerSize + (i * bucketSize));
+		if (!success)
+			return false;
+	}
+	return true;
+}
+
+bool DiskMultiMap::openExisting(const std::string& filename)
+{
+	bf.close();
+	return bf.openExisting(filename);
+}
+
+void DiskMultiMap::close()
+{
+	bf.close();
+}
+
+bool DiskMultiMap::insert(const std::string& key, const std::string& value, const std::string& context)
+{
+	if (key.size() > MAX_STRING_SIZE || value.size() > MAX_STRING_SIZE || context.size() > MAX_STRING_SIZE)
+		return false;
+
+	hash<string> hashFunction;
+	size_t hashResult = hashFunction(key);  //returns a size_t value, now we have to convert into an offset
+	cout << hashResult << endl;
+
+	Header header;
+	bf.read(header, 0);
+	hashResult = hashResult % header.numBuckets;  //hashResult is now a bucket NUMBER, to convert into offset we match the bucket number with its index
+	cout << hashResult << endl;
+
+	Bucket b;
+	BinaryFile::Offset BucketOffset = sizeof(Header) + (hashResult * sizeof(Bucket));
+	cout << BucketOffset << endl;
+	bf.read(b, BucketOffset);  //get the bucket at BucketOffset
+
+	Node newNode;
+	strcpy_s(newNode.key, key.c_str()); //initialize newNode
+	strcpy_s(newNode.value, value.c_str());
+	strcpy_s(newNode.context, context.c_str());
+	newNode.next = b.head;  //set newNode's next to the current head
+
+	if (header.spaceHead == 0)
+	{
+		b.head = bf.fileLength();  //the new head offset should point to newNode's current offset
+		bf.write(newNode, bf.fileLength());  //write the newNode into the list at the last open offset
+		bf.write(b.head, 0);  //update the head variable to point to the new offset in the list
+		return true;
+	}
+	else
+	{
+		Node filledNode;
+		bf.read(filledNode, header.spaceHead);  //sets filledNode equal to the existing node at spaceHead
+		bf.write(newNode, header.spaceHead);  //overwrite the newNode into the first available open space
+		b.head = header.spaceHead;  //set head equal to newNode's offset
+		header.spaceHead = filledNode.next;  //set spaceHead equal to the next "deleted" node
+		bf.write(b.head, 0);
+		bf.write(header.spaceHead, 4);
+		return true;
+	}
+}
+
+
+
+int main()
+{
+	DiskMultiMap d;
+	d.createNew("temp", 10);
+	d.insert("ke", "a", "a");
+}
